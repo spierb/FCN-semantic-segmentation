@@ -23,3 +23,6 @@ src/__pycache__/
 data/cityscapes/
 data/pascal_voc/
 vgg11.pth
+logs/
+results/image_results/
+results/models/
