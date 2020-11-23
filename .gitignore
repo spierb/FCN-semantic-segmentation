@@ -26,3 +26,4 @@ vgg11.pth
 logs/
 results/image_results/
 results/models/
+summary/

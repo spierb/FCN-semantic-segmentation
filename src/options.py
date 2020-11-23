@@ -1,7 +1,7 @@
 '''
 Author: bg
 Date: 2020-11-11 22:05:27
-LastEditTime: 2020-11-18 13:48:40
+LastEditTime: 2020-11-23 15:33:05
 LastEditors: bg
 Description: 
 FilePath: /FCN-semantic-segmentation/src/options.py
@@ -32,6 +32,7 @@ class Options():
         self.parser.add_argument('--data_dir', default='data/')
         self.parser.add_argument('--logs_dir', default='logs/')
         self.parser.add_argument('--results_dir', default='results/')
+        self.parser.add_argument('--summary_dir', default='summary/')
 
         self.opt = None
 

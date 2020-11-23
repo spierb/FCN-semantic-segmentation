@@ -1,7 +1,7 @@
 '''
 Author: bg
 Date: 2020-11-16 20:04:14
-LastEditTime: 2020-11-18 14:58:14
+LastEditTime: 2020-11-23 16:40:17
 LastEditors: bg
 Description: 
 FilePath: /FCN-semantic-segmentation/src/model.py
@@ -17,6 +17,8 @@ import re
 import sys
 from PIL import Image
 import json
+from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 
 class Model():
     def __init__(self, opt):
@@ -42,11 +44,14 @@ class Model():
     def load_model(self):
         self.net.load_state_dict(torch.load(self.opt.pretrained))
 
-    def train_epoch(self, epoch, t):
+    def train_epoch(self, epoch, t, batch_num):
         start = time.time()
         self.net.train()
         loss_list = []
-        batch_num = 0
+        train_summary_dir = os.path.join(self.opt.summary_dir, t, 'train')
+        if not os.path.exists(train_summary_dir):
+            os.makedirs(train_summary_dir)
+        writer = SummaryWriter(train_summary_dir)
         for i, (raw, target_onehot, target_raw) in enumerate(self.dataloader['train_dst']):
             self.optimizer.zero_grad()
             output = self.net(raw)
@@ -56,23 +61,29 @@ class Model():
             sys.stdout.flush()
             loss.backward()
             self.optimizer.step()
-            batch_num = i+1
+            batch_num += 1
+            writer.add_scalar('loss', loss, batch_num)
         self.save_model(epoch, t)
         print('\r Train epoch %d finished! Totally %d batches, using time %f s.                                    ' % (epoch, batch_num, time.time()-start))
-        return loss_list
-
+        return loss_list, batch_num
 
     def train(self):
         log_time_list = re.findall('\w+', time.asctime(time.localtime(time.time())))
         t = log_time_list[1] + '_' + log_time_list[2] + '_' + log_time_list[3] + '_' + log_time_list[4]
+        batch_num=0
         for i in range(self.opt.epoch):
-            train_loss_list = self.train_epoch(i+1, t)
+            train_loss_list, batch_num = self.train_epoch(i+1, t, batch_num)
             val_loss_mean = self.val(i+1, t)
-            self.write_log(i+1, t, train_loss_list, val_loss_mean)
+            _ = self.get_result_img(i+1, t)
+            # self.write_log(i+1, t, train_loss_list, val_loss_mean)
     
     def val(self, epoch, t):
         self.net.eval()
         loss_list = []
+        eval_summary_dir = os.path.join(self.opt.summary_dir, t, 'eval')
+        if not os.path.exists(eval_summary_dir):
+            os.makedirs(eval_summary_dir)
+        writer = SummaryWriter(eval_summary_dir)
         for i, (raw, target_onehot, target_raw) in enumerate(self.dataloader['val_dst']):
             output = self.net(raw)
             loss = self.loss(output, target_raw)
@@ -80,6 +91,7 @@ class Model():
             print('\r evaluating epoch %d, batch %d, loss: %f' % (epoch, i, float(loss)), end='')
             sys.stdout.flush()
         loss_mean = sum(loss_list) / len(loss_list)
+        writer.add_scalar('eval loss', loss_mean, epoch)
         print('\r mean val loss of epoch %d is %f                          ' % (epoch, loss_mean))
         return loss_mean
 
@@ -123,26 +135,38 @@ class Model():
         return smry
     
     def get_result_img(self, epoch=0, t=0, show=False):
-        self.net.train()
+        self.net.eval()
+        img_list = []
+        img_summary_dir = os.path.join(self.opt.summary_dir, t, 'img')
+        if not os.path.exists(img_summary_dir):
+            os.makedirs(img_summary_dir)
+        writer = SummaryWriter(img_summary_dir)
+        label = 'test img epoch ' + str(epoch)
         for i, (raw, target_onehot, target_raw) in enumerate(self.dataloader['test_dst']):
-            output = self.net(raw)
-            # print(output)
-            raw_img = show_onehot_img(raw[0], show=show)
-            target_img = show_onehot_img(target_onehot[0], show=show)
-            output_img = show_onehot_img(output[0], show=show)
-            result = Image.new(raw_img.mode, (self.opt.crop*3, self.opt.crop))
-            result.paste(raw_img, box=(0, 0))
-            result.paste(target_img, box=(self.opt.crop, 0))
-            result.paste(output_img, box=(self.opt.crop*2, 0))
-            if show:
-                result.show()
-            if not (epoch == 0) & (t == 0):
-                file_dir = os.path.join('results/image_results', str(t), str(epoch))
-                if not os.path.exists(file_dir):
-                    os.makedirs(file_dir)
-                result.save(os.path.join(file_dir, str(i) + '.jpg'))
-            if i == 9:
-                break
+            if i < 10:
+                output = self.net(raw)
+                # print(output)
+                raw_img = show_onehot_img(raw[0], show=show)
+                target_img = show_onehot_img(target_onehot[0], show=show)
+                output_img = show_onehot_img(output[0], show=show)
+                result = Image.new(raw_img.mode, (self.opt.crop*3, self.opt.crop))
+                result.paste(raw_img, box=(0, 0))
+                result.paste(target_img, box=(self.opt.crop, 0))
+                result.paste(output_img, box=(self.opt.crop*2, 0))
+                result = np.array(result)
+                writer.add_image(label, result, i, dataformats='HWC')
+                img_list.append(result)
+            else:
+                return img_list
+            # if show:
+            #     result.show()
+            # if not (epoch == 0) & (t == 0):
+            #     file_dir = os.path.join('results/image_results', str(t), str(epoch))
+            #     if not os.path.exists(file_dir):
+            #         os.makedirs(file_dir)
+            #     result.save(os.path.join(file_dir, str(i) + '.jpg'))
+            # if i == 9:
+            #     break
 
 
 
